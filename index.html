@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="Opłaty Stałe">
 <meta name="theme-color" content="#0f1117">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<title>Opłaty Stałe 4.1</title>
+<title>Opłaty Stałe 4.1 v11</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
@@ -360,7 +360,7 @@ textarea.input{resize:vertical;min-height:60px;font-family:var(--mono);font-size
 <!-- ══ SIDEBAR ══ -->
 <aside class="sidebar" id="sidebar">
   <div class="logo">
-    <div class="logo-title">Opłaty Stałe<span>v4.1</span></div>
+    <div class="logo-title">Opłaty Stałe<span>v4.1.11</span></div>
     <div class="logo-sub">system zarządzania finansami</div>
   </div>
   <nav class="nav">
@@ -932,10 +932,13 @@ async function loadState(){
 }
 function save(silent=false){
   const json=JSON.stringify(S);
-  // save to both IDB and localStorage as fallback
   dbPut(DB_KEY,S).catch(()=>{});
   try{localStorage.setItem('os_v2',json);}catch(e){}
   if(S.settings?.autoSave&&dirHandle) saveToFolder(true);
+  if(!save._syncing && S.settings?.gistAutoSync && S.settings?.gistToken && S.settings?.gistId){
+    clearTimeout(window._gistSyncTimer);
+    window._gistSyncTimer = setTimeout(gistPush, 3000);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2442,10 +2445,9 @@ function saveGistSettings(){
   if(token) S.settings.gistToken = token;
   if(id!==undefined) S.settings.gistId = id;
   if(auto!==undefined) S.settings.gistAutoSync = auto;
-  // Dodatkowy zapis do osobnych kluczy — przeżyje reset głównego stanu
   try{
-    if(token) localStorage.setItem('gist_token_backup', token);
-    if(id) localStorage.setItem('gist_id_backup', id);
+    if(token) localStorage.setItem('gist_token_bk', token);
+    if(id)    localStorage.setItem('gist_id_bk', id);
   }catch(e){}
   save();
   updateGistUI();
@@ -2453,18 +2455,10 @@ function saveGistSettings(){
 }
 
 function updateGistUI(){
-  // Przywróć token z backupu jeśli go nie ma w stanie
   try{
-    const backupToken = localStorage.getItem('gist_token_backup');
-    const backupId    = localStorage.getItem('gist_id_backup');
-    if(backupToken && !S.settings?.gistToken){
-      if(!S.settings) S.settings={};
-      S.settings.gistToken = backupToken;
-    }
-    if(backupId && !S.settings?.gistId){
-      if(!S.settings) S.settings={};
-      S.settings.gistId = backupId;
-    }
+    const bt=localStorage.getItem('gist_token_bk'), bi=localStorage.getItem('gist_id_bk');
+    if(bt&&!S.settings?.gistToken){if(!S.settings)S.settings={};S.settings.gistToken=bt;}
+    if(bi&&!S.settings?.gistId)  {if(!S.settings)S.settings={};S.settings.gistId=bi;}
   }catch(e){}
   const hasToken = !!gistToken();
   const hasId    = !!gistId();
@@ -2525,7 +2519,7 @@ async function gistPush(){
     if(!id && data.id){
       if(!S.settings) S.settings={};
       S.settings.gistId = data.id;
-      try{ localStorage.setItem('gist_id_backup', data.id); }catch(e){}
+      try{localStorage.setItem('gist_id_bk', data.id);}catch(e){}
       const inp = document.getElementById('gist-id-input');
       if(inp) inp.value = data.id;
     }
@@ -2597,17 +2591,6 @@ function setSyncStatus(state){
 function toggleTokenVisibility(){
   const inp = document.getElementById('gist-token-input');
   if(inp) inp.type = inp.type==='password'?'text':'password';
-}
-
-// Hook into existing save() to auto-sync
-const _origSave = save;
-function save(silent=false){
-  _origSave.call(this,silent);
-  if(gistAutoSync() && gistToken() && gistId()){
-    // debounce: don't spam API on rapid edits
-    clearTimeout(window._gistSyncTimer);
-    window._gistSyncTimer = setTimeout(gistPush, 3000);
-  }
 }
 
 function toast(msg,type='success'){
