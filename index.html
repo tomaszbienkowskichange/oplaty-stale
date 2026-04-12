@@ -2442,12 +2442,30 @@ function saveGistSettings(){
   if(token) S.settings.gistToken = token;
   if(id!==undefined) S.settings.gistId = id;
   if(auto!==undefined) S.settings.gistAutoSync = auto;
+  // Dodatkowy zapis do osobnych kluczy — przeżyje reset głównego stanu
+  try{
+    if(token) localStorage.setItem('gist_token_backup', token);
+    if(id) localStorage.setItem('gist_id_backup', id);
+  }catch(e){}
   save();
   updateGistUI();
-  toast('Ustawienia Gist zapisane','info');
+  toast('Ustawienia Gist zapisane ✓','info');
 }
 
 function updateGistUI(){
+  // Przywróć token z backupu jeśli go nie ma w stanie
+  try{
+    const backupToken = localStorage.getItem('gist_token_backup');
+    const backupId    = localStorage.getItem('gist_id_backup');
+    if(backupToken && !S.settings?.gistToken){
+      if(!S.settings) S.settings={};
+      S.settings.gistToken = backupToken;
+    }
+    if(backupId && !S.settings?.gistId){
+      if(!S.settings) S.settings={};
+      S.settings.gistId = backupId;
+    }
+  }catch(e){}
   const hasToken = !!gistToken();
   const hasId    = !!gistId();
   const badge    = document.getElementById('gist-status-badge');
@@ -2457,8 +2475,8 @@ function updateGistUI(){
   const idInp    = document.getElementById('gist-id-input');
   const autoChk  = document.getElementById('gist-autosync');
 
-  if(tokenInp && !tokenInp.value) tokenInp.value = gistToken();
-  if(idInp    && !idInp.value)    idInp.value    = gistId();
+  if(tokenInp) tokenInp.value = gistToken();
+  if(idInp)    idInp.value    = gistId();
   if(autoChk)                     autoChk.checked = gistAutoSync();
 
   if(badge){
@@ -2507,6 +2525,7 @@ async function gistPush(){
     if(!id && data.id){
       if(!S.settings) S.settings={};
       S.settings.gistId = data.id;
+      try{ localStorage.setItem('gist_id_backup', data.id); }catch(e){}
       const inp = document.getElementById('gist-id-input');
       if(inp) inp.value = data.id;
     }
