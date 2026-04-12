@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="Opłaty Stałe">
 <meta name="theme-color" content="#0f1117">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<title>Opłaty Stałe 4.1 v11</title>
+<title>Opłaty Stałe 4.1 v13</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
@@ -2447,7 +2447,9 @@ function saveGistSettings(){
   if(auto!==undefined) S.settings.gistAutoSync = auto;
   try{
     if(token) localStorage.setItem('gist_token_bk', token);
+    else      localStorage.removeItem('gist_token_bk');
     if(id)    localStorage.setItem('gist_id_bk', id);
+    else      localStorage.removeItem('gist_id_bk');
   }catch(e){}
   save();
   updateGistUI();
@@ -2457,8 +2459,8 @@ function saveGistSettings(){
 function updateGistUI(){
   try{
     const bt=localStorage.getItem('gist_token_bk'), bi=localStorage.getItem('gist_id_bk');
-    if(bt&&!S.settings?.gistToken){if(!S.settings)S.settings={};S.settings.gistToken=bt;}
-    if(bi&&!S.settings?.gistId)  {if(!S.settings)S.settings={};S.settings.gistId=bi;}
+    if(bt&&S.settings?.gistToken===undefined){if(!S.settings)S.settings={};S.settings.gistToken=bt;}
+    if(bi&&S.settings?.gistId===undefined)  {if(!S.settings)S.settings={};S.settings.gistId=bi;}
   }catch(e){}
   const hasToken = !!gistToken();
   const hasId    = !!gistId();
