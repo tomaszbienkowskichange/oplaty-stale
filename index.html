@@ -2590,6 +2590,8 @@ function save(silent=false){
     window._gistSyncTimer = setTimeout(gistPush, 3000);
   }
 }
+
+function toast(msg,type='success'){
   const c=document.getElementById('toasts');
   const t=document.createElement('div');
   t.className=`toast toast-${type==='error'?'error':type==='info'?'info':'success'}`;
