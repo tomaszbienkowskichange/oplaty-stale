@@ -360,7 +360,7 @@ textarea.input{resize:vertical;min-height:60px;font-family:var(--mono);font-size
 <!-- ══ SIDEBAR ══ -->
 <aside class="sidebar" id="sidebar">
   <div class="logo">
-    <div class="logo-title">Opłaty Stałe<span>v4.1.11</span></div>
+    <div class="logo-title">Opłaty Stałe<span>v4.2</span></div>
     <div class="logo-sub">system zarządzania finansami</div>
   </div>
   <nav class="nav">
@@ -429,6 +429,7 @@ textarea.input{resize:vertical;min-height:60px;font-family:var(--mono);font-size
     <!-- ══ DASHBOARD ══ -->
     <div class="view active" id="view-dashboard">
       <div class="kpi-row" id="kpi-row"></div>
+      <div id="expiring-contracts" style="display:none"></div>
       <div class="grid-2">
         <div class="card">
           <div class="card-header"><span class="card-title">Ostatnie 13 miesięcy</span>
@@ -756,8 +757,14 @@ textarea.input{resize:vertical;min-height:60px;font-family:var(--mono);font-size
         <input class="input" id="cm-color" type="color" value="#3b82f6">
       </div>
     </div>
-    <div class="field">
-      <label><input type="checkbox" id="cm-hidden" style="accent-color:var(--accent)"> Ukryta (niewidoczna w domyślnych widokach)</label>
+    <div class="field-row">
+      <div class="field">
+        <label>Data końca umowy (opcjonalnie)</label>
+        <input class="input" id="cm-contract-end" type="month" placeholder="RRRR-MM">
+      </div>
+      <div class="field" style="justify-content:flex-end;padding-top:22px">
+        <label style="cursor:pointer"><input type="checkbox" id="cm-hidden" style="accent-color:var(--accent)"> Ukryta w domyślnych widokach</label>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('ov-cat')">Anuluj</button>
@@ -1116,6 +1123,45 @@ function updateProfileChip(){
 // ═══════════════════════════════════════════════════════════
 //  DASHBOARD
 // ═══════════════════════════════════════════════════════════
+function renderExpiringContracts(){
+  const el=document.getElementById('expiring-contracts');
+  if(!el)return;
+  const now=nowYM();
+  const [ny,nm]=now.split('-').map(Number);
+  const alerts=[];
+  Object.entries(S.categories).forEach(([name,cat])=>{
+    if(!cat.contractEnd)return;
+    const [ey,em]=cat.contractEnd.split('-').map(Number);
+    const diff=(ey-ny)*12+(em-nm);
+    if(diff<=3&&diff>=-1){
+      alerts.push({name,end:cat.contractEnd,diff,tag:cat.tag});
+    }
+  });
+  if(!alerts.length){el.style.display='none';return;}
+  el.style.display='block';
+  alerts.sort((a,b)=>a.diff-b.diff);
+  el.innerHTML=`
+    <div class="card" style="border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.05);margin-bottom:12px">
+      <div class="card-header" style="margin-bottom:10px">
+        <span class="card-title" style="color:var(--yellow)">⚠ Kończące się umowy</span>
+        <span style="font-size:.6rem;font-family:var(--mono);color:var(--text3)">${alerts.length} umów w ciągu 3 miesięcy</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${alerts.map(a=>{
+          const urgency=a.diff<=0?'var(--red)':a.diff<=1?'var(--orange,#fb923c)':'var(--yellow)';
+          const label=a.diff<0?'PRZETERMINOWANE':a.diff===0?'KOŃCZY SIĘ W TYM MIESIĄCU':`za ${a.diff} mies.`;
+          return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:var(--surface2);border-radius:6px;border-left:3px solid ${urgency}">
+            <div>
+              <div style="font-size:.8rem;font-weight:700;color:var(--text)">${a.name}</div>
+              <div style="font-size:.65rem;color:var(--text3);font-family:var(--mono)">${TAGS[a.tag]||a.tag} • do ${a.end}</div>
+            </div>
+            <div style="font-size:.7rem;font-weight:700;color:${urgency};font-family:var(--mono)">${label}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
 function renderDashboard(){
   const now=nowYM(), prev=prevYM(now), y=now.split('-')[0];
   const cNow=monthTotal(now), cPrev=monthTotal(prev);
@@ -1148,6 +1194,8 @@ function renderDashboard(){
     Object.entries(cat.values||{}).forEach(([ym2,v])=>{if(ym2.startsWith(y)&&v>0)tagSums[t]=(tagSums[t]||0)+v;});
   });
   drawPie('c-tags-pie',Object.keys(tagSums),Object.values(tagSums),Object.keys(tagSums).map(t=>TAG_COLORS[t]||'#888'));
+  // Expiring contracts alert
+  renderExpiringContracts();
   // Top cats
   const catSums={};
   cats.forEach(n=>{
@@ -1329,7 +1377,7 @@ function setChartTab(tab){
 }
 function renderCharts(){
   const el=document.getElementById('charts-content');
-  const cats=visibleCats(true);
+  const cats=activeCats().length?activeCats():visibleCats(false);
   const allYrs=allYears();
   const curY=new Date().getFullYear();
 
@@ -1352,7 +1400,7 @@ function renderCharts(){
       const labels12=MNS.slice();
       const curData=Array.from({length:12},(_,i)=>monthTotal(`${selY}-${String(i+1).padStart(2,'0')}`,cats));
       const prevData=Array.from({length:12},(_,i)=>monthTotal(`${prevY}-${String(i+1).padStart(2,'0')}`,cats));
-      drawGroupedBar('ch-ycomp',labels12,[{label:String(selY),data:curData,color:'#3b82f6'},{label:String(prevY),data:prevData,color:'#6366f1'}]);
+      drawGroupedBar('ch-ycomp',labels12,[{label:String(selY),data:curData,color:'#3b82f6'},{label:String(prevY),data:prevData,color:'#fbbf24'}]);
       const m12=[];let y2=now;for(let i=0;i<12;i++){m12.unshift(y2);y2=prevYM(y2);}
       const tagKeys=Object.keys(TAGS);
       const datasets=tagKeys.map(t=>({label:TAG_LABELS[t]||TAGS[t],data:m12.map(m=>{let s=0;cats.filter(n=>S.categories[n].tag===t).forEach(n=>{const v=(S.categories[n].values||{})[m];if(v&&v>0)s+=v;});return s;}),color:TAG_COLORS[t]}));
@@ -1615,10 +1663,18 @@ function drawStackedBar(id,labels,datasets){
     options:{
       responsive:true,maintainAspectRatio:false,
       plugins:{
-        legend:{display:true,position:'top',labels:{
-          color:C.text,boxWidth:14,boxHeight:14,padding:14,
-          font:{size:11,family:"'IBM Plex Mono',monospace"},
-          usePointStyle:true
+        legend:{display:true,position:'bottom',align:'start',labels:{
+          color:C.text,boxWidth:10,boxHeight:10,padding:10,
+          font:{size:10,family:"'IBM Plex Mono',monospace"},
+          usePointStyle:true,
+          generateLabels:chart=>{
+            const ds=chart.data.datasets;
+            return ds.map((d,i)=>({
+              text:(d.label||'').replace(/\s*\(.*?\)/g,'').substring(0,18),
+              fillStyle:d.backgroundColor,strokeStyle:d.borderColor||d.backgroundColor,
+              lineWidth:2,hidden:false,index:i,datasetIndex:i
+            }));
+          }
         }},
         tooltip:{...CHART_DEFAULTS.tooltip,mode:'index',intersect:false,
           itemSort:(a,b)=>b.parsed.y-a.parsed.y,
@@ -2082,6 +2138,7 @@ function openCatModal(name){
   document.getElementById('cm-default').value=c?.defaultAmount||'';
   document.getElementById('cm-color').value=c?.color||'#3b82f6';
   document.getElementById('cm-hidden').checked=c?.hidden||false;
+  document.getElementById('cm-contract-end').value=c?.contractEnd||'';
   openModal('ov-cat');
 }
 function saveCat(){
@@ -2095,6 +2152,7 @@ function saveCat(){
     defaultAmount:parseFloat(document.getElementById('cm-default').value)||0,
     color:document.getElementById('cm-color').value,
     hidden:document.getElementById('cm-hidden').checked,
+    contractEnd:document.getElementById('cm-contract-end').value||null,
   });
   save(true);closeModal('ov-cat');toast('Kategoria zapisana');renderCats();
 }
