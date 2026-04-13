@@ -622,8 +622,6 @@ textarea.input{resize:vertical;min-height:60px;font-family:var(--mono);font-size
                 Wczytaj ← Gist
               </button>
               <button class="btn btn-ghost btn-sm" onclick="saveGistSettings()">Zapisz ustawienia</button>
-              <button class="btn btn-ghost btn-sm" onclick="debugGist()" style="border-color:var(--yellow);color:var(--yellow)">🔍 Debug</button>
-              <button class="btn btn-ghost btn-sm" onclick="testGistPatch()" style="border-color:var(--orange);color:var(--orange)">🧪 Test PATCH</button>
             </div>
             <div style="margin-top:10px">
               <label style="display:flex;align-items:center;gap:8px;font-size:.72rem;color:var(--text2);cursor:pointer">
@@ -2628,43 +2626,6 @@ function setSyncStatus(state){
 function toggleTokenVisibility(){
   const inp = document.getElementById('gist-token-input');
   if(inp) inp.type = inp.type==='password'?'text':'password';
-}
-
-async function testGistPatch(){
-  const t = gistToken(), id = gistId();
-  if(!t||!id){alert('Brak tokena lub ID');return;}
-  try{
-    const r = await fetch(`https://api.github.com/gists/${id}`,{
-      method:'PATCH',
-      headers:{'Authorization':'token '+t,'Content-Type':'application/json'},
-      body:JSON.stringify({description:'test',files:{'oplaty_stale.json':{content:'{}'}}})
-    });
-    const d = await r.json();
-    if(r.ok) alert('✓ PATCH OK\nGist: '+d.html_url);
-    else alert('✗ PATCH błąd\nStatus: '+r.status+'\nOpis: '+d.message+'\nDokładniej: '+JSON.stringify(d));
-  }catch(e){alert('✗ Sieć: '+e.message);}
-}
-
-async function debugGist(){
-  const t = gistToken();
-  const id = gistId();
-  const ls_t = localStorage.getItem('gist_token_bk2')||localStorage.getItem('gist_token_bk')||'';
-  const ls_id = localStorage.getItem('gist_id_bk2')||localStorage.getItem('gist_id_bk')||'';
-  let msg = '';
-  msg += 'Token w S.settings: ' + (S.settings?.gistToken ? S.settings.gistToken.slice(0,8)+'... ('+S.settings.gistToken.length+' znaków)' : 'BRAK') + '\n';
-  msg += 'Token w localStorage: ' + (ls_t ? ls_t.slice(0,8)+'... ('+ls_t.length+' znaków)' : 'BRAK') + '\n';
-  msg += 'Token z gistToken(): ' + (t ? t.slice(0,8)+'... ('+t.length+' znaków)' : 'BRAK') + '\n';
-  msg += 'Gist ID: ' + (id || 'BRAK') + '\n\n';
-  if(t){
-    msg += 'Testuję API...\n';
-    try{
-      const r = await fetch('https://api.github.com/user',{headers:{'Authorization':'token '+t}});
-      const d = await r.json();
-      if(r.ok) msg += '✓ API OK – konto: '+d.login+'\nLimit: '+r.headers.get('X-RateLimit-Remaining')+'/'+r.headers.get('X-RateLimit-Limit');
-      else msg += '✗ API błąd: '+d.message+' ('+r.status+')';
-    }catch(e){ msg += '✗ Sieć: '+e.message; }
-  } else { msg += '✗ Brak tokena – nie można testować API'; }
-  alert(msg);
 }
 
 function toast(msg,type='success'){
