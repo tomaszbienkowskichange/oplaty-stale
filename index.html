@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="Opłaty Stałe">
 <meta name="theme-color" content="#0f1117">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<title>Opłaty Stałe 4.1 v13</title>
+<title>Opłaty Stałe 4.1 v14</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
@@ -2433,23 +2433,44 @@ const today=()=>new Date().toISOString().slice(0,10);
 const GIST_FILENAME = 'oplaty_stale.json';
 const GIST_API = 'https://api.github.com/gists';
 
-function gistToken(){ return S.settings?.gistToken||''; }
-function gistId(){ return S.settings?.gistId||''; }
+// Token jest w S.settings (synchronizowany przez save/load),
+// ale ZAWSZE backupowany w localStorage – przeżywa reset S.
+const LS_TOKEN_BK = 'gist_token_bk2';
+const LS_ID_BK    = 'gist_id_bk2';
+
+function gistToken(){
+  // Priorytet: S.settings → localStorage backup
+  const t = S.settings?.gistToken || localStorage.getItem(LS_TOKEN_BK) || '';
+  // Jeśli znaleziony w backupie a nie w S – przywróć do S
+  if(!S.settings?.gistToken && t){ if(!S.settings)S.settings={}; S.settings.gistToken=t; }
+  return t;
+}
+function gistId(){
+  const id = S.settings?.gistId || localStorage.getItem(LS_ID_BK) || '';
+  if(!S.settings?.gistId && id){ if(!S.settings)S.settings={}; S.settings.gistId=id; }
+  return id;
+}
 function gistAutoSync(){ return S.settings?.gistAutoSync||false; }
 
 function saveGistSettings(){
   if(!S.settings) S.settings={};
-  const token = document.getElementById('gist-token-input')?.value?.trim();
-  const id    = document.getElementById('gist-id-input')?.value?.trim();
+  const token = (document.getElementById('gist-token-input')?.value||'').trim();
+  const id    = (document.getElementById('gist-id-input')?.value||'').trim();
   const auto  = document.getElementById('gist-autosync')?.checked;
-  if(token) S.settings.gistToken = token;
-  if(id!==undefined) S.settings.gistId = id;
+  if(token){ S.settings.gistToken = token; }
+  // Pozwól wyczyścić Gist ID (pusty string = reset)
+  S.settings.gistId = id;
   if(auto!==undefined) S.settings.gistAutoSync = auto;
+  // Zawsze zapisz backup do localStorage – przeżyje reset stanu S
   try{
-    if(token) localStorage.setItem('gist_token_bk', token);
-    else      localStorage.removeItem('gist_token_bk');
-    if(id)    localStorage.setItem('gist_id_bk', id);
-    else      localStorage.removeItem('gist_id_bk');
+    if(token) localStorage.setItem(LS_TOKEN_BK, token);
+    else      localStorage.removeItem(LS_TOKEN_BK);
+    if(id)    localStorage.setItem(LS_ID_BK, id);
+    else      localStorage.removeItem(LS_ID_BK);
+    // migruj stare klucze
+    const oldT=localStorage.getItem('gist_token_bk'), oldI=localStorage.getItem('gist_id_bk');
+    if(oldT&&!token){S.settings.gistToken=oldT;localStorage.setItem(LS_TOKEN_BK,oldT);}
+    localStorage.removeItem('gist_token_bk'); localStorage.removeItem('gist_id_bk');
   }catch(e){}
   save();
   updateGistUI();
@@ -2457,10 +2478,12 @@ function saveGistSettings(){
 }
 
 function updateGistUI(){
+  // Przywróć token z backup jeśli S go zgubił (np. po pull z Gista)
   try{
-    const bt=localStorage.getItem('gist_token_bk'), bi=localStorage.getItem('gist_id_bk');
-    if(bt&&S.settings?.gistToken===undefined){if(!S.settings)S.settings={};S.settings.gistToken=bt;}
-    if(bi&&S.settings?.gistId===undefined)  {if(!S.settings)S.settings={};S.settings.gistId=bi;}
+    const bt=localStorage.getItem(LS_TOKEN_BK)||localStorage.getItem('gist_token_bk');
+    const bi=localStorage.getItem(LS_ID_BK)||localStorage.getItem('gist_id_bk');
+    if(bt&&!S.settings?.gistToken){if(!S.settings)S.settings={};S.settings.gistToken=bt;localStorage.setItem(LS_TOKEN_BK,bt);}
+    if(bi&&!S.settings?.gistId)  {if(!S.settings)S.settings={};S.settings.gistId=bi;localStorage.setItem(LS_ID_BK,bi);}
   }catch(e){}
   const hasToken = !!gistToken();
   const hasId    = !!gistId();
@@ -2504,10 +2527,13 @@ async function gistPush(){
   const id = gistId();
   setSyncStatus('push');
   try{
+    // Nie zapisuj tokena do Gista – to sekret, żyje tylko lokalnie
+    const payload = JSON.parse(JSON.stringify(S));
+    if(payload.settings) delete payload.settings.gistToken;
     const body = {
       description:'Opłaty Stałe – sync',
       public:false,
-      files:{ [GIST_FILENAME]:{ content: JSON.stringify(S,null,2) } }
+      files:{ [GIST_FILENAME]:{ content: JSON.stringify(payload,null,2) } }
     };
     const url    = id ? `${GIST_API}/${id}` : GIST_API;
     const method = id ? 'PATCH' : 'POST';
@@ -2550,15 +2576,16 @@ async function gistPull(){
     const content = data.files?.[GIST_FILENAME]?.content;
     if(!content) throw new Error('Brak pliku '+GIST_FILENAME+' w Gist');
     const parsed  = JSON.parse(content);
-    // Preserve current gist settings (token / id not in remote)
-    const kept = {
-      gistToken:token, gistId:id,
-      gistAutoSync: gistAutoSync(),
-      gistLastSync: Date.now()
-    };
     if(!parsed.settings) parsed.settings={};
-    Object.assign(parsed.settings, kept);
+    // ZAWSZE nadpisz token+id+autosync lokalnymi wartościami po pull –
+    // dane z Gista nie zawierają tokena (nigdy go tam nie zapisujemy)
+    parsed.settings.gistToken   = token;
+    parsed.settings.gistId      = id;
+    parsed.settings.gistAutoSync = gistAutoSync();
+    parsed.settings.gistLastSync = Date.now();
     S = parsed;
+    // Odśwież backup w localStorage po zastąpieniu S
+    try{ localStorage.setItem(LS_TOKEN_BK, token); localStorage.setItem(LS_ID_BK, id); }catch(e){}
     save();
     setSyncStatus('ok');
     updateGistUI();
