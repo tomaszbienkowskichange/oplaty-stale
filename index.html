@@ -2522,9 +2522,11 @@ function updateGistUI(){
 }
 
 async function gistPush(){
+  if(save._syncing) return;
   const token = gistToken();
   if(!token){ toast('Brak tokena GitHub – skonfiguruj w Ustawieniach','error'); nav('settings'); return; }
   const id = gistId();
+  save._syncing = true;
   setSyncStatus('push');
   try{
     // Nie zapisuj tokena do Gista – to sekret, żyje tylko lokalnie
@@ -2552,13 +2554,17 @@ async function gistPush(){
       if(inp) inp.value = data.id;
     }
     S.settings.gistLastSync = Date.now();
+    save._syncing = true;  // prevent auto-sync loop during save
     save();
+    save._syncing = false;
     setSyncStatus('ok');
     updateGistUI();
     toast('Zapisano do GitHub Gist ✓');
   }catch(e){
     setSyncStatus('err');
     toast('Błąd Gist: '+e.message,'error');
+  } finally {
+    save._syncing = false;
   }
 }
 
