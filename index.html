@@ -177,7 +177,6 @@ tr.hidden-row td{opacity:.4}
 .part-row{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto minmax(0,1.3fr) auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border)}
 .part-row:last-child{border-bottom:0}
 .part-row .input{width:100%;padding:8px 10px;font-size:.85rem}
-.part-row .part-note{grid-column:1/-1}
 .part-chk{display:flex!important;align-items:center;gap:6px;margin:0!important;font-size:.8rem!important;white-space:nowrap;cursor:pointer}
 .part-chk input{width:17px;height:17px;accent-color:var(--accent)}
 .parts-sum{margin-top:10px;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);font-size:.82rem;line-height:1.7;color:var(--text2)}
@@ -214,6 +213,13 @@ tr.hidden-row td{opacity:.4}
 .parts-auto input{width:17px;height:17px;accent-color:var(--accent)}
 .input[readonly]{opacity:.75;cursor:not-allowed}
 @media(max-width:700px){.plan-row{grid-template-columns:34px 1fr 110px}}
+.part-due-wrap{grid-column:span 2;display:flex;align-items:center;gap:6px;font-size:.75rem;color:var(--text3)}
+.part-due-wrap .input{flex:1;min-width:0}
+.part-row .part-note{grid-column:span 3}
+@media(max-width:700px){.part-due-wrap{grid-column:1/-1}.part-row .part-note{grid-column:1/-1}}
+.plan-row{grid-template-columns:36px minmax(0,1fr) 140px!important}
+.plan-row .input[type=date]{text-align:left}
+.plan-src{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:14px}
 .fab{position:fixed;right:22px;bottom:24px;z-index:60;background:var(--accent);color:#06101f;border:0;border-radius:30px;padding:15px 24px;font-size:1rem;font-weight:800;box-shadow:0 8px 26px rgba(0,0,0,.5);cursor:pointer}
 .toast-container{position:fixed;top:18px;right:18px;display:flex;flex-direction:column;gap:8px;z-index:999}
 .toast{padding:11px 16px;border-radius:var(--r);font-weight:700;font-size:.9rem;transform:translateX(130%);transition:transform .2s;min-width:180px;max-width:340px}.toast.show{transform:none}
@@ -754,18 +760,23 @@ tr.hidden-row td{opacity:.4}
 <div class="overlay" id="ov-plan" onclick="if(event.target===this)closeModal('ov-plan')">
   <div class="modal modal-wide">
     <div class="modal-title">⛓ Rozbij płatność na raty</div>
-    <div class="hint" style="margin:-6px 0 12px">Każda rata zostanie dodana jako osobna pozycja w kolejnym miesiącu (istniejące wpisy w tych miesiącach nie są nadpisywane – rata zostanie do nich dodana).</div>
+    <div class="hint" style="margin:-6px 0 12px">Każda rata trafia do miesiąca swojej daty jako osobna pozycja (istniejące wpisy nie są nadpisywane – rata jest do nich dodawana). Możesz też rozbić pozycję, którą już wpisałeś.</div>
     <div class="field-row">
-      <div class="field"><label>Kategoria</label><input class="input" id="pl-cat" list="pl-cat-list" placeholder="Kategoria..." oninput="planCatChanged()"><datalist id="pl-cat-list"></datalist>
+      <div class="field"><label>Kategoria</label><input class="input" id="pl-cat" list="pl-cat-list" placeholder="Kategoria..." oninput="planCatChanged(false)" onchange="planCatChanged(true)"><datalist id="pl-cat-list"></datalist>
         <div id="pl-newtag-wrap" style="display:none;margin-top:6px"><label>Grupa nowej kategorii</label><select class="input" id="pl-newtag"></select></div></div>
       <div class="field"><label>Nazwa pozycji</label><input class="input" id="pl-label" placeholder="np. bufor do pompy ciepła"></div>
+    </div>
+    <div class="plan-src" id="pl-src-wrap" style="display:none">
+      <label>Rozbij na raty pozycję z wpisu</label>
+      <select class="input" id="pl-src" onchange="planSrcChanged()"></select>
+      <label class="parts-auto" style="margin:8px 0 0"><input type="checkbox" id="pl-replace" checked> Zastąp wybrane ratami (usuń je z miesiąca wpisu, żeby nie liczyły się podwójnie)</label>
     </div>
     <div class="field-row">
       <div class="field"><label>Kwota całkowita (PLN)</label><input class="input" id="pl-total" type="number" step="0.01" placeholder="0.00" oninput="planPreview(true)"></div>
       <div class="field"><label>Liczba rat</label><input class="input" id="pl-n" type="number" min="2" max="120" value="6" oninput="planPreview(true)"></div>
     </div>
     <div class="field-row">
-      <div class="field"><label>Miesiąc pierwszej raty</label><input class="input" id="pl-start" type="month" onchange="planPreview(false)"></div>
+      <div class="field"><label>Data pierwszej raty (z dniem)</label><input class="input" id="pl-start" type="date" onchange="planPreview(false)"></div>
       <div class="field"><label>Co ile miesięcy</label><select class="input" id="pl-step" onchange="planPreview(false)"><option value="1">Co miesiąc</option><option value="2">Co 2 miesiące</option><option value="3">Co kwartał</option><option value="6">Co pół roku</option><option value="12">Raz w roku</option></select></div>
     </div>
     <div class="field"><label>Uwagi (opcjonalnie)</label><input class="input" id="pl-note" placeholder="np. numer umowy ratalnej"></div>
@@ -2704,14 +2715,14 @@ function saveEntry(){
   const st=document.getElementById('e-status').value;
   const note=document.getElementById('e-note').value.trim();
   const cmt=document.getElementById('e-comment').value.trim();
-  if(!n||!ym){toast('Podaj kategorię i miesiąc','error');return;}
+  if(!n||!ym){toast('Podaj kategorię i miesiąc','error');return false;}
   if(!S.categories[n])S.categories[n]={tag:(document.getElementById('e-newtag')?.value||'inne'),description:'',color:'',hidden:false,defaultAmount:0,values:{},statuses:{},notes:{},comments:{}};
   const c=S.categories[n];
   if(!isNaN(amt))c.values[ym]=Math.round(amt*100)/100;
   c.statuses=c.statuses||{};c.statuses[ym]=st;
   c.notes=c.notes||{};if(note)c.notes[ym]=note;else delete c.notes[ym];
   c.comments=c.comments||{};if(cmt)c.comments[ym]=cmt;else delete c.comments[ym];
-  const parts=_editParts.map(p=>({id:p.id||newPartId(),label:(p.label||'').trim(),amount:(p.amount==null||isNaN(p.amount))?0:Math.round(p.amount*100)/100,refund:!!p.refund,status:(p.refund&&p.status==='settled')?'settled':'open',note:(p.note||'').trim()})).filter(p=>p.label||p.amount||p.note);
+  const parts=_editParts.map(p=>({id:p.id||newPartId(),label:(p.label||'').trim(),amount:(p.amount==null||isNaN(p.amount))?0:Math.round(p.amount*100)/100,refund:!!p.refund,status:(p.refund&&p.status==='settled')?'settled':'open',note:(p.note||'').trim(),...(/^\d{4}-\d{2}-\d{2}$/.test(p.due||'')?{due:p.due}:{}),...(p.plan?{plan:p.plan}:{})})).filter(p=>p.label||p.amount||p.note);
   c.parts=c.parts||{};c.autoSum=c.autoSum||{};
   const auto=!!document.getElementById('e-autosum')?.checked&&parts.length>0;
   if(parts.length)c.parts[ym]=parts;else delete c.parts[ym];
@@ -2720,6 +2731,7 @@ function saveEntry(){
   if(currentView==='month')renderMonth();
   else if(currentView==='history')renderHistory();
   else if(currentView==='categories')renderCats();
+  return true;
 }
 
 // CATEGORY MODAL
@@ -3397,7 +3409,7 @@ function refreshDelBtn(){
   const c=S.categories[(document.getElementById('e-cat')?.value||'').trim()];
   b.style.display=entryExists(c,document.getElementById('e-month')?.value)?'':'none';
 }
-document.addEventListener('change',e=>{if(e.target.id==='e-cat'||e.target.id==='e-month'){refreshDelBtn();refreshDup();}});
+document.addEventListener('change',e=>{if(e.target.id==='e-cat'||e.target.id==='e-month'){refreshDelBtn();refreshDup();}if(e.target.id==='e-month')partsRender();});
 document.addEventListener('input',e=>{if(e.target.id==='e-cat')refreshDup()});
 
 // ═══════════════════════════════════════════════════════════
@@ -3460,10 +3472,14 @@ function partsPopupHTML(c,ym,catName){
   const arr=c.parts?.[ym]||[];if(!arr.length)return'';
   const I=partsInfo(c,ym);
   return`<div class="popup-parts"><div class="popup-hist-label">Pozycje wpisu</div>
-    ${arr.map(p=>`<div class="pp-row"><div class="pp-main"><div class="pp-label">${escH(p.label||'—')}</div>${p.note?`<div class="pp-note">${escH(p.note)}</div>`:''}</div>
+    ${arr.map(p=>`<div class="pp-row"><div class="pp-main"><div class="pp-label">${escH(p.label||'—')}</div>${p.due?`<div class="pp-note">📅 termin ${fmtDateFull(p.due)}</div>`:''}${p.note?`<div class="pp-note">${escH(p.note)}</div>`:''}</div>
       <div class="pp-amt">${fmtPLN(p.amount||0)}</div>
       ${p.refund?`<span class="badge ${p.status==='settled'?'badge-paid':'badge-unpaid'}" onclick="togglePartStatus('${esc(catName)}','${ym}','${p.id}','popup')" title="Kliknij, aby zmienić status">↩ ${p.status==='settled'?'Rozliczone':'Nierozliczone'}</span>`:''}</div>`).join('')}
     <div class="pp-sum">Suma pozycji: <b>${fmtPLN(I.sum)}</b>${I.refund?` · do zwrotu: <b>${fmtPLN(I.refund)}</b> (nierozliczone ${fmtPLN(I.open)}, rozliczone ${fmtPLN(I.settled)})`:''}</div></div>`;
+}
+function monthRange(){
+  const ym=document.getElementById('e-month')?.value;if(!/^\d{4}-\d{2}$/.test(ym||''))return'';
+  const[y,m]=ym.split('-').map(Number);return`min="${ym}-01" max="${ym}-${String(new Date(y,m,0).getDate()).padStart(2,'0')}"`;
 }
 function partAdd(){
   {const am=document.getElementById('e-amount'),cb=document.getElementById('e-autosum');
@@ -3489,6 +3505,7 @@ function partsRender(){
       <option value="settled" ${p.status==='settled'?'selected':''}>Rozliczone</option>
     </select>
     <button type="button" class="btn btn-sm btn-ghost" onclick="partDel(${i})" title="Usuń pozycję">✕</button>
+    <div class="part-due-wrap"><span>Termin</span><input class="input" type="date" value="${escH(p.due||'')}" ${monthRange()} onchange="partSet(${i},'due',this.value)" title="Termin płatności (data z dniem)"></div>
     <input class="input part-note" placeholder="Uwagi / notatka" value="${escH(p.note)}" oninput="partSet(${i},'note',this.value)">
   </div>`).join('')||'<div class="hint" style="margin:6px 0">Brak pozycji.</div>';
   partsSum();
@@ -3618,49 +3635,110 @@ function entryAsItems(useTyped){
 function addItemFromPopup(n,ym){openEntryModal(n,ym);entryAsItems(false);}
 
 // ── Raty ──
-let _planRates=[];
+let _planRates=[],_planSrcMonth=null,_planSrcItems=[],_planSrcReal=false;
+const fmtDateFull=d=>new Date(d+'T00:00:00').toLocaleDateString('pl-PL');
+const fmtDayMon=d=>new Date(d+'T00:00:00').toLocaleDateString('pl-PL',{day:'numeric',month:'short'});
+function addMonthsClamped(ds,n){
+  const[y,m,d]=ds.split('-').map(Number),t=y*12+(m-1)+n,ny=Math.floor(t/12),nm=t%12,dim=new Date(ny,nm+1,0).getDate();
+  return`${ny}-${String(nm+1).padStart(2,'0')}-${String(Math.min(d,dim)).padStart(2,'0')}`;
+}
+function defaultPlanDate(ym){
+  const[y,m]=ym.split('-').map(Number),dim=new Date(y,m,0).getDate(),t=new Date();
+  const day=(t.getFullYear()===y&&t.getMonth()+1===m)?t.getDate():Math.min(t.getDate(),dim);
+  return`${ym}-${String(day).padStart(2,'0')}`;
+}
 function openPlanFromEntry(){
+  // najpierw zapisz to, co jest we wpisie – okno rat podstawi dane z zapisanego wpisu
   const n=(document.getElementById('e-cat').value||'').trim(),ym=document.getElementById('e-month').value;
-  const exists=entryExists(S.categories[n],ym),amt=parseFloat(document.getElementById('e-amount').value);
-  closeModal('ov-entry');
-  openPlanModal(n,ym,(!exists&&!isNaN(amt))?amt:'');
+  if(saveEntry()===false)return;
+  openPlanModal(n,ym);
 }
 function openPlanModal(cat,ym,total){
+  _planSrcMonth=ym||currentMonth;
   document.getElementById('pl-cat-list').innerHTML=Object.keys(S.categories).map(n=>`<option value="${escH(n)}">`).join('');
   document.getElementById('pl-newtag').innerHTML=Object.entries(getGroups()).map(([k,g])=>`<option value="${k}" ${k==='inne'?'selected':''}>${g.label}</option>`).join('');
   document.getElementById('pl-cat').value=cat||'';
   document.getElementById('pl-label').value='';
   document.getElementById('pl-total').value=total||'';
   document.getElementById('pl-n').value=6;
-  document.getElementById('pl-start').value=ym||currentMonth;
+  document.getElementById('pl-start').value=defaultPlanDate(_planSrcMonth);
   document.getElementById('pl-step').value='1';
   document.getElementById('pl-note').value='';
-  planCatChanged();planPreview(true);
+  planCatChanged(true);
   openModal('ov-plan');
 }
-function planCatChanged(){
+function planBuildSources(){
+  const n=(document.getElementById('pl-cat').value||'').trim(),c=S.categories[n],ym=_planSrcMonth,wrap=document.getElementById('pl-src-wrap'),sel=document.getElementById('pl-src');
+  _planSrcItems=[];_planSrcReal=false;
+  if(!c||!ym||!(c.values?.[ym]>0)){wrap.style.display='none';sel.innerHTML='<option value="new">nowa pozycja</option>';sel.value='new';return false;}
+  _planSrcReal=(c.parts?.[ym]||[]).length>0;
+  _planSrcItems=itemsFromEntry(c,ym);
+  let h=`<option value="new">— nowa pozycja (wpiszę dane sam) —</option>`;
+  if(_planSrcReal)h+=_planSrcItems.map(p=>`<option value="${p.id}">${escH(p.label||'(bez nazwy)')} — ${fmtPLN(+p.amount||0)}${p.due?' · '+fmtDayMon(p.due):''}</option>`).join('');
+  h+=`<option value="all">Cały wpis ${mlabel(ym)}${_planSrcReal&&_planSrcItems.length>1?' ('+_planSrcItems.map(p=>escH(p.label||'?')).join(' + ')+')':''} — ${fmtPLN(c.values[ym])}</option>`;
+  sel.innerHTML=h;sel.value='all';wrap.style.display='block';
+  return true;
+}
+function planCatChanged(rebuild){
   const n=(document.getElementById('pl-cat').value||'').trim();
   document.getElementById('pl-newtag-wrap').style.display=n&&!S.categories[n]?'block':'none';
+  if(!rebuild)return;
+  if(planBuildSources())planSrcChanged();else planPreview(true);
+}
+function planSrcChanged(){
+  const n=(document.getElementById('pl-cat').value||'').trim(),c=S.categories[n],ym=_planSrcMonth,v=document.getElementById('pl-src').value;
+  const rep=document.getElementById('pl-replace');
+  let label='',total='',note='',date=defaultPlanDate(ym);
+  if(c&&v==='all'){
+    const labels=_planSrcReal?[...new Set(_planSrcItems.map(p=>((p.plan?p.plan.label:p.label)||'').trim()).filter(x=>x&&x!=='Wcześniejszy wpis'&&x!=='Pozostałe'))]:[];
+    label=labels.length?labels.join(' + '):n;
+    total=c.values[ym];
+    note=c.notes?.[ym]||'';
+    const dues=_planSrcItems.map(p=>p.due).filter(Boolean).sort();if(dues.length)date=dues[0];
+  }else if(c&&v!=='new'){
+    const it=_planSrcItems.find(p=>p.id===v);
+    if(it){label=(it.plan?it.plan.label:it.label)||'';total=it.amount;note=it.note||'';if(it.due)date=it.due;}
+  }
+  document.getElementById('pl-label').value=label;
+  document.getElementById('pl-total').value=total;
+  document.getElementById('pl-note').value=note;
+  document.getElementById('pl-start').value=date;
+  rep.checked=v!=='new';rep.disabled=v==='new';
+  planPreview(true);
 }
 function planPreview(regen){
   const total=parseFloat(document.getElementById('pl-total').value),N=parseInt(document.getElementById('pl-n').value),
         start=document.getElementById('pl-start').value,step=parseInt(document.getElementById('pl-step').value)||1,
         box=document.getElementById('pl-preview');
-  if(!(total>0)||!(N>=2)||N>120||!start){box.innerHTML='<div class="hint">Podaj kwotę całkowitą, liczbę rat (2–120) i miesiąc pierwszej raty, aby zobaczyć harmonogram.</div>';_planRates=[];return;}
+  if(!(total>0)||!(N>=2)||N>120||!/^\d{4}-\d{2}-\d{2}$/.test(start)){box.innerHTML='<div class="hint">Podaj kwotę całkowitą, liczbę rat (2–120) i datę pierwszej raty, aby zobaczyć harmonogram.</div>';_planRates=[];return;}
   if(regen||_planRates.length!==N){
     const base=Math.floor(total/N*100)/100;
-    _planRates=Array.from({length:N},(_,i)=>({ym:pxAdd(start,i*step),amount:i<N-1?base:r2(total-base*(N-1))}));
-  }else _planRates.forEach((r,i)=>{r.ym=pxAdd(start,i*step);});
-  box.innerHTML=`<label style="margin-top:4px">Harmonogram (kwoty rat możesz poprawić)</label>
-    <div class="plan-list">${_planRates.map((r,i)=>`<div class="plan-row"><span class="mu">#${i+1}</span><span>${mlabel(r.ym)}</span><input class="input" type="number" step="0.01" value="${r.amount}" oninput="planRateSet(${i},this.value)"></div>`).join('')}</div>
+    _planRates=Array.from({length:N},(_,i)=>({date:addMonthsClamped(start,i*step),amount:i<N-1?base:r2(total-base*(N-1))}));
+  }else _planRates.forEach((r,i)=>{r.date=addMonthsClamped(start,i*step);});
+  box.innerHTML=`<label style="margin-top:4px">Harmonogram (datę i kwotę każdej raty możesz poprawić)</label>
+    <div class="plan-list">${_planRates.map((r,i)=>`<div class="plan-row"><span class="mu">#${i+1}</span><input class="input" type="date" value="${r.date}" onchange="planDateSet(${i},this.value)"><input class="input" type="number" step="0.01" value="${r.amount}" oninput="planRateSet(${i},this.value)"></div>`).join('')}</div>
     <div class="parts-sum" id="pl-sum"></div>`;
   planSum();
 }
 function planRateSet(i,v){if(_planRates[i]){_planRates[i].amount=v===''?0:parseFloat(v);planSum();}}
+function planDateSet(i,v){if(_planRates[i]){_planRates[i].date=v;planSum();}}
 function planSum(){
-  const el=document.getElementById('pl-sum');if(!el)return;
+  const el=document.getElementById('pl-sum');if(!el||!_planRates.length)return;
   const total=parseFloat(document.getElementById('pl-total').value)||0,sum=r2(_planRates.reduce((t,x)=>t+(+x.amount||0),0)),diff=r2(total-sum);
-  el.innerHTML=`Suma rat: <b>${fmtPLN(sum)}</b> z <b>${fmtPLN(total)}</b> · ${_planRates.length} rat, od ${mlabel(_planRates[0].ym)} do ${mlabel(_planRates[_planRates.length-1].ym)}`+(Math.abs(diff)>=0.01?`<br><span class="warn">Różnica: ${diff>0?'+':''}${fmtPLN(diff)} – suma rat musi być równa kwocie całkowitej</span>`:`<br><span style="color:var(--green)">✓ Suma rat zgadza się z kwotą całkowitą</span>`);
+  const ds=_planRates.map(x=>x.date).filter(Boolean).sort();
+  el.innerHTML=`Suma rat: <b>${fmtPLN(sum)}</b> z <b>${fmtPLN(total)}</b> · ${_planRates.length} rat${ds.length?`, od ${fmtDateFull(ds[0])} do ${fmtDateFull(ds[ds.length-1])}`:''}`+(Math.abs(diff)>=0.01?`<br><span class="warn">Różnica: ${diff>0?'+':''}${fmtPLN(diff)} – suma rat musi być równa kwocie całkowitej</span>`:`<br><span style="color:var(--green)">✓ Suma rat zgadza się z kwotą całkowitą</span>`);
+}
+function planRemoveSource(c,ym,v){
+  // usuwa z miesiąca wpisu pozycję (lub cały wpis) zastępowaną ratami
+  c.parts=c.parts||{};c.autoSum=c.autoSum||{};
+  if(v==='all'){
+    delete c.parts[ym];delete c.autoSum[ym];delete c.values[ym];
+    if(c.statuses)delete c.statuses[ym];
+    return;
+  }
+  const left=_planSrcItems.filter(p=>p.id!==v);
+  if(left.length){c.parts[ym]=left;c.autoSum[ym]=true;c.values[ym]=r2(left.reduce((t,x)=>t+(+x.amount||0),0));}
+  else{delete c.parts[ym];delete c.autoSum[ym];delete c.values[ym];if(c.statuses&&!c.notes?.[ym]&&!c.comments?.[ym])delete c.statuses[ym];}
 }
 function createPlan(){
   const n=(document.getElementById('pl-cat').value||'').trim(),label=(document.getElementById('pl-label').value||'').trim(),
@@ -3668,14 +3746,19 @@ function createPlan(){
   if(!n){toast('Podaj kategorię','error');return;}
   if(!label){toast('Podaj nazwę pozycji','error');return;}
   if(!(total>0)||_planRates.length<2){toast('Podaj kwotę i liczbę rat (min. 2)','error');return;}
+  if(_planRates.some(r=>!/^\d{4}-\d{2}-\d{2}$/.test(r.date||''))){toast('Każda rata musi mieć datę','error');return;}
   const sum=r2(_planRates.reduce((t,x)=>t+(+x.amount||0),0));
   if(Math.abs(sum-total)>=0.01){toast('Suma rat nie zgadza się z kwotą całkowitą','error');return;}
   if(!S.categories[n])S.categories[n]={tag:document.getElementById('pl-newtag').value||'inne',description:'',color:'',hidden:false,defaultAmount:0,values:{},statuses:{},notes:{},comments:{}};
-  const c=S.categories[n],pid='pl'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),N=_planRates.length;
-  c.statuses=c.statuses||{};
-  _planRates.forEach((r,i)=>{
-    addItemToMonth(c,r.ym,{id:newPartId(),label:`${label} (rata ${i+1}/${N})`,amount:r2(r.amount),refund:false,status:'open',note,plan:{id:pid,i:i+1,n:N,total,label}});
-    if(!c.statuses[r.ym])c.statuses[r.ym]='unpaid';
+  const c=S.categories[n],pid='pl'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+  const rates=[..._planRates].sort((a,b)=>a.date.localeCompare(b.date)),N=rates.length;
+  c.statuses=c.statuses||{};c.values=c.values||{};
+  const src=document.getElementById('pl-src').value;
+  if(src!=='new'&&document.getElementById('pl-replace').checked&&c.values[_planSrcMonth]>0)planRemoveSource(c,_planSrcMonth,src);
+  rates.forEach((r,i)=>{
+    const ym=r.date.slice(0,7);
+    addItemToMonth(c,ym,{id:newPartId(),label:`${label} (rata ${i+1}/${N})`,amount:r2(r.amount),refund:false,status:'open',note,due:r.date,plan:{id:pid,i:i+1,n:N,total,label}});
+    if(!c.statuses[ym])c.statuses[ym]='unpaid';
   });
   save(true);closeModal('ov-plan');toast(`Utworzono ${N} rat`);nav(currentView);
 }
@@ -3683,7 +3766,7 @@ function collectPlans(){
   const m={};
   Object.entries(S.categories).forEach(([n,c])=>Object.entries(c.parts||{}).forEach(([ym,arr])=>(arr||[]).forEach(p=>{
     if(!p.plan)return;
-    const k=p.plan.id;(m[k]=m[k]||{id:k,n,label:p.plan.label||p.label,N:p.plan.n,total:p.plan.total,items:[]}).items.push({ym,amount:+p.amount||0,i:p.plan.i,paid:c.statuses?.[ym]==='paid'});
+    const k=p.plan.id;(m[k]=m[k]||{id:k,n,label:p.plan.label||p.label,N:p.plan.n,total:p.plan.total,items:[]}).items.push({ym,due:p.due||'',amount:+p.amount||0,i:p.plan.i,paid:c.statuses?.[ym]==='paid'});
   })));
   return Object.values(m).map(pl=>{pl.items.sort((a,b)=>a.i-b.i);return pl;}).sort((a,b)=>b.items[0].ym.localeCompare(a.items[0].ym));
 }
@@ -3699,17 +3782,17 @@ function deletePlan(pid){
   save(true);toast('Harmonogram usunięty');nav(currentView);
 }
 function renderPlansHTML(){
-  const plans=collectPlans(),now=nowYM();
+  const plans=collectPlans(),now=nowYM(),td=new Date(),todayStr=`${td.getFullYear()}-${String(td.getMonth()+1).padStart(2,'0')}-${String(td.getDate()).padStart(2,'0')}`;
   if(!plans.length)return`<div class="report-section"><div class="report-title">Raty / harmonogramy</div><div class="empty">Brak rat. Użyj przycisku „⛓ Raty” w widoku miesiąca albo w oknie edycji wpisu.</div></div>`;
   let left=0,paidSum=0;
   const rows=plans.map(pl=>{
     const paid=pl.items.filter(x=>x.paid),pS=paid.reduce((t,x)=>t+x.amount,0),tot=pl.items.reduce((t,x)=>t+x.amount,0);
     paidSum+=pS;left+=tot-pS;
     return`<tr><td style="font-weight:700">${escH(pl.label)}</td><td>${escH(pl.n)}</td>
-      <td>${mlabel(pl.items[0].ym)} → ${mlabel(pl.items[pl.items.length-1].ym)}</td>
+      <td>${pl.items[0].due?fmtDateFull(pl.items[0].due):mlabel(pl.items[0].ym)} → ${pl.items[pl.items.length-1].due?fmtDateFull(pl.items[pl.items.length-1].due):mlabel(pl.items[pl.items.length-1].ym)}</td>
       <td class="amt">${fmtPLN(tot)}</td><td>${paid.length}/${pl.items.length}</td><td class="amt pos">${fmtPLN(pS)}</td><td class="amt ${tot-pS>0?'big':'pos'}">${fmtPLN(tot-pS)}</td>
       <td><button class="btn btn-sm btn-danger" onclick="deletePlan('${pl.id}')" title="Usuń cały harmonogram">🗑</button></td></tr>
-      <tr><td colspan="8" style="padding-top:0"><div class="plan-chips">${pl.items.map(x=>`<span class="plan-chip ${x.paid?'paid':(x.ym<now?'late':'')}" onclick="openRowPopup('${esc(pl.n)}','${x.ym}')" title="${x.paid?'Opłacona':(x.ym<now?'Po terminie – nieopłacona':'Do zapłaty')}">#${x.i} ${mshort(x.ym)} · ${fmt(x.amount)}${x.paid?' ✓':''}</span>`).join('')}</div></td></tr>`;
+      <tr><td colspan="8" style="padding-top:0"><div class="plan-chips">${pl.items.map(x=>`<span class="plan-chip ${x.paid?'paid':((x.due?x.due<todayStr:x.ym<now)?'late':'')}" onclick="openRowPopup('${esc(pl.n)}','${x.ym}')" title="${x.paid?'Opłacona':((x.due?x.due<todayStr:x.ym<now)?'Po terminie – nieopłacona':'Do zapłaty')}${x.due?' · termin '+fmtDateFull(x.due):''}">#${x.i} ${x.due?fmtDayMon(x.due):mshort(x.ym)} · ${fmt(x.amount)}${x.paid?' ✓':''}</span>`).join('')}</div></td></tr>`;
   }).join('');
   return`<div class="report-section"><div class="report-title">Raty / harmonogramy <span>${plans.length} plan(ów) · rata liczona jako opłacona, gdy wpis miesiąca ma status „Opłacone”</span></div>
     <div class="settle-kpis"><div class="kpi"><div class="kpi-label">Spłacone</div><div class="kpi-value" style="color:var(--green)">${fmtPLN(paidSum)}</div></div><div class="kpi"><div class="kpi-label">Pozostało do spłaty</div><div class="kpi-value" style="color:var(--yellow)">${fmtPLN(left)}</div></div></div>
